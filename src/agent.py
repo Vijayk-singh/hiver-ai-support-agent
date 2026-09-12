@@ -25,6 +25,7 @@ from src.classify_intents import classify_single_pair, PREDEFINED_INTENTS
 from src.knowledge_base import SupportKnowledgeBase
 from src.reply_generator import GroundedReplyGenerator
 from src.escalation_engine import EscalationEngine, EscalationDecision
+from src.verifier import ActionVerifier
 
 console = Console()
 DEFAULT_DATA_PATH = PROJECT_ROOT / "data" / "processed" / "amazonhelp_support_pairs.csv"
@@ -42,6 +43,7 @@ class SupportAgentResult(BaseModel):
     trivial_baseline_reply: str
     retrieval_baseline_reply: str
     historical_cases: List[Dict[str, Any]] = []
+    verifier_audit: Optional[Dict[str, Any]] = None
 
 
 class AmazonSupportAgent:
@@ -52,13 +54,14 @@ class AmazonSupportAgent:
         self.kb = SupportKnowledgeBase(data_path=self.data_path)
         self.reply_generator = GroundedReplyGenerator(knowledge_base=self.kb)
         self.escalation_engine = EscalationEngine()
+        self.verifier = ActionVerifier()
 
     def process_message(
         self,
         customer_text: str,
         brand_text_hint: str = ""
     ) -> SupportAgentResult:
-        """Process an incoming customer message through all three stages."""
+        """Process an incoming customer message through all stages."""
         # Step 1: Classify intent
         intent, sec_intent = classify_single_pair(customer_text, brand_text_hint)
 
@@ -83,9 +86,27 @@ class AmazonSupportAgent:
             retrieved_cases=retrieved_cases
         )
 
-        # If escalated to human, adjust reply to reassure customer about live handoff
+        # Step 5: Verification & Safety Guardrail (LLM Critic / Heuristic Guardrail)
         final_reply = agent_reply_info['reply']
-        if escalation_decision.decision == "ESCALATE":
+        audit = self.verifier.verify_action(
+            customer_text=customer_text,
+            proposed_intent=intent,
+            secondary_intent=sec_intent,
+            proposed_escalation=escalation_decision.decision,
+            escalation_reason=escalation_decision.reason,
+            drafted_reply=final_reply
+        )
+
+        # Apply guardrail overrides if critic detected safety violation or sarcasm
+        if audit.get("override_escalation"):
+            escalation_decision.decision = audit.get("final_escalation", "ESCALATE")
+            escalation_decision.reason = f"[Critic Override]: {audit.get('critique', '')}"
+            escalation_decision.priority = "HIGH"
+            escalation_decision.risk_level = "HIGH"
+
+        if audit.get("refined_reply"):
+            final_reply = audit["refined_reply"]
+        elif escalation_decision.decision == "ESCALATE":
             if "specialist" not in final_reply.lower() and "phone or chat" not in final_reply.lower():
                 final_reply = f"{final_reply} A support specialist has also been notified to assist. ^AI"
 
@@ -99,7 +120,8 @@ class AmazonSupportAgent:
             target_channel=agent_reply_info['resolution_channel'],
             trivial_baseline_reply=b1_reply,
             retrieval_baseline_reply=b2_reply,
-            historical_cases=retrieved_cases
+            historical_cases=retrieved_cases,
+            verifier_audit=audit
         )
 
 
