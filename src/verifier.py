@@ -13,11 +13,14 @@ import json
 import logging
 from typing import Dict, Any, Optional
 import requests
+from dotenv import load_dotenv
+
+load_dotenv()
 
 logger = logging.getLogger("ActionVerifier")
 
 # Target models
-GEMINI_MODEL = "gemini-1.5-flash"
+GEMINI_MODEL = "gemini-2.5-flash"
 OPENAI_MODEL = "gpt-4o-mini"
 
 
@@ -28,8 +31,8 @@ class ActionVerifier:
     """
 
     def __init__(self):
-        self.gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-        self.openai_key = os.getenv("OPENAI_API_KEY")
+        self.gemini_key = (os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or "").strip().strip('"').strip("'")
+        self.openai_key = (os.getenv("OPENAI_API_KEY") or "").strip().strip('"').strip("'")
         self.is_active = bool(self.gemini_key or self.openai_key)
         self.provider = "gemini" if self.gemini_key else ("openai" if self.openai_key else "offline_heuristic")
 
@@ -127,12 +130,13 @@ Respond ONLY in valid JSON matching this exact structure:
             "contents": [{"parts": [{"text": prompt}]}],
             "generationConfig": {
                 "temperature": 0.1,
-                "responseMimeType": "application/json"
+                "responseMimeType": "application/json",
+                "thinkingConfig": {"thinkingBudget": 0}
             }
         }
 
         try:
-            resp = requests.post(url, json=payload, timeout=5)
+            resp = requests.post(url, json=payload, timeout=15)
             if resp.status_code == 200:
                 data = resp.json()
                 text_content = data["candidates"][0]["content"]["parts"][0]["text"]
