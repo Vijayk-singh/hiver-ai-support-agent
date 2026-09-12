@@ -1,11 +1,8 @@
 """
-LLM Action Verifier and Safety Guardrail Agent for @AmazonHelp
-Supports Google Gemini and OpenAI ChatGPT APIs with automatic offline fallback.
-
-Architecture: Maker-Checker / Critic-Supervisor Pattern
-1. Primary Pipeline (Maker): Rule-based intent classifier + TF-IDF retrieval + escalation engine.
-2. LLM Verifier (Checker): Critic agent auditing classification accuracy, escalation safety,
-   and reply policy compliance before actions are finalized.
+AI Verifier & Safety Guardrail Agent for @AmazonHelp
+Audits intent accuracy, detects sarcasm, and verifies escalation safety.
+Supports Google Gemini (gemini-2.5-flash) and OpenAI ChatGPT (gpt-4o-mini).
+If the verifier is offline or fails, the pipeline safely falls back to the Primary Engine.
 """
 
 import os
@@ -19,22 +16,18 @@ load_dotenv()
 
 logger = logging.getLogger("ActionVerifier")
 
-# Target models
 GEMINI_MODEL = "gemini-2.5-flash"
 OPENAI_MODEL = "gpt-4o-mini"
 
 
 class ActionVerifier:
-    """Verifies intent classification, escalation safety, and reply quality using an LLM.
-
-    Gracefully falls back to deterministic heuristic validation if no API keys are provided.
-    """
+    """Independent AI Supervisor that audits and critiques the Primary Engine's actions."""
 
     def __init__(self):
         self.gemini_key = (os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or "").strip().strip('"').strip("'")
         self.openai_key = (os.getenv("OPENAI_API_KEY") or "").strip().strip('"').strip("'")
-        self.is_active = bool(self.gemini_key or self.openai_key)
-        self.provider = "gemini" if self.gemini_key else ("openai" if self.openai_key else "offline_heuristic")
+        self.is_configured = bool(self.gemini_key or self.openai_key)
+        self.preferred_provider = "gemini" if self.gemini_key else ("openai" if self.openai_key else "none")
 
     def verify_action(
         self,
@@ -45,17 +38,10 @@ class ActionVerifier:
         escalation_reason: str,
         drafted_reply: str
     ) -> Dict[str, Any]:
-        """Runs verification over proposed system actions.
+        """Audits the proposed actions using an LLM.
 
-        Returns a dictionary containing:
-        - verified (bool)
-        - provider (str)
-        - intent_corrected (bool)
-        - verified_intent (str)
-        - override_escalation (bool)
-        - final_escalation (str)
-        - verifier_critique (str)
-        - refined_reply (Optional[str])
+        If the verifier is offline or fails, returns verifier_online=False
+        so the main system can proceed independently without halting.
         """
         if self.gemini_key:
             return self._verify_via_gemini(
@@ -68,10 +54,16 @@ class ActionVerifier:
                 proposed_escalation, escalation_reason, drafted_reply
             )
         else:
-            return self._verify_via_heuristic_critic(
-                customer_text, proposed_intent, secondary_intent,
-                proposed_escalation, escalation_reason, drafted_reply
-            )
+            return {
+                "verifier_online": False,
+                "provider": "offline",
+                "override_escalation": False,
+                "final_escalation": proposed_escalation,
+                "intent_accurate": True,
+                "verified_intent": proposed_intent,
+                "critique": "AI Verifier agent is inactive (no API key configured). Result is determined solely on the basis of the Primary System.",
+                "refined_reply": None
+            }
 
     def _build_prompt(
         self,
@@ -82,7 +74,7 @@ class ActionVerifier:
         escalation_reason: str,
         drafted_reply: str
     ) -> str:
-        return f"""You are the Lead Support QA Supervisor and Safety Guardrail AI for Amazon Customer Support (@AmazonHelp).
+        return f"""You are the Lead Customer Support QA Supervisor and Safety Guardrail AI for Amazon Customer Support (@AmazonHelp).
 Your job is to audit and verify an automated support agent's actions before they are executed.
 
 AUDIT TARGET:
@@ -93,15 +85,15 @@ AUDIT TARGET:
 - Proposed Drafted Reply: "{drafted_reply}"
 
 INSTRUCTIONS:
-1. Verify Intent: Is the proposed intent accurate? Watch out for sarcasm, anger, or multi-topic complaints.
-2. Verify Escalation Safety: Should this be escalated to a human agent?
-   - CRITICAL SAFETY RULE: You MUST override to "ESCALATE" if:
-     a) Customer mentions lost, stolen, or false-delivered packages.
-     b) Financial disputes (unauthorized charges, double billing, missing refunds).
-     c) Account security (lockouts, 2FA issues, hacked accounts).
-     d) Hostile churn threats, legal threats, or agent misconduct complaints.
-     e) Sarcastic criticism masking severe complaints (e.g. "thanks for dropping my laptop in the rain").
-3. Verify Reply Safety: Does the drafted reply make false promises (e.g. promising a direct refund without auth), request sensitive PII over public Twitter, or sound dismissive?
+1. Check Intent Accuracy: Watch out for sarcasm, anger, or multi-topic complaints.
+2. Check Critical Escalation Safety: Should this query be escalated to a human agent?
+   - CRITICAL ESCALATION TRIGGERS (You MUST vote "ESCALATE" if any apply):
+     a) Missing, lost, stolen, or false-delivered packages.
+     b) Financial disputes (unauthorized deductions, double charges, refund delays).
+     c) Account security (lockouts, 2FA errors, suspicious access).
+     d) Sarcasm masking severe dissatisfaction (e.g. "thanks Amazon for leaving my parcel in the pouring rain").
+     e) Hostile churn threats, legal threats, or representative misconduct complaints.
+3. Check Reply Policy: Ensure the draft doesn't make unauthorized commitments or solicit PII over public channels.
 
 Respond ONLY in valid JSON matching this exact structure:
 {{
@@ -110,7 +102,7 @@ Respond ONLY in valid JSON matching this exact structure:
   "final_escalation": "{proposed_escalation}",
   "intent_accurate": true,
   "verified_intent": "{proposed_intent}",
-  "critique": "Short explanation of your audit assessment.",
+  "critique": "Clear, concise 1-2 sentence supervisory assessment.",
   "refined_reply": null
 }}"""
 
@@ -136,22 +128,38 @@ Respond ONLY in valid JSON matching this exact structure:
         }
 
         try:
-            resp = requests.post(url, json=payload, timeout=15)
+            resp = requests.post(url, json=payload, timeout=12)
             if resp.status_code == 200:
                 data = resp.json()
                 text_content = data["candidates"][0]["content"]["parts"][0]["text"]
                 result = json.loads(text_content)
-                result["provider"] = f"gemini ({GEMINI_MODEL})"
+                result["verifier_online"] = True
+                result["provider"] = f"Gemini 2.5 Flash"
                 return result
             else:
                 logger.warning(f"Gemini API returned status {resp.status_code}: {resp.text}")
+                return {
+                    "verifier_online": False,
+                    "provider": "Gemini (Error)",
+                    "override_escalation": False,
+                    "final_escalation": proposed_escalation,
+                    "intent_accurate": True,
+                    "verified_intent": proposed_intent,
+                    "critique": f"AI Verifier agent is temporarily unreachable (HTTP {resp.status_code}). Result is determined solely on the basis of the Primary System.",
+                    "refined_reply": None
+                }
         except Exception as e:
-            logger.warning(f"Gemini verification failed: {e}. Falling back to heuristic critic.")
-
-        return self._verify_via_heuristic_critic(
-            customer_text, proposed_intent, secondary_intent,
-            proposed_escalation, escalation_reason, drafted_reply
-        )
+            logger.warning(f"Gemini verification call failed: {e}")
+            return {
+                "verifier_online": False,
+                "provider": "Gemini (Unavailable)",
+                "override_escalation": False,
+                "final_escalation": proposed_escalation,
+                "intent_accurate": True,
+                "verified_intent": proposed_intent,
+                "critique": "AI Verifier agent is currently offline/timed out. Result is determined solely on the basis of the Primary System.",
+                "refined_reply": None
+            }
 
     def _verify_via_openai(
         self,
@@ -180,65 +188,35 @@ Respond ONLY in valid JSON matching this exact structure:
         }
 
         try:
-            resp = requests.post(url, headers=headers, json=payload, timeout=5)
+            resp = requests.post(url, headers=headers, json=payload, timeout=10)
             if resp.status_code == 200:
                 data = resp.json()
                 text_content = data["choices"][0]["message"]["content"]
                 result = json.loads(text_content)
-                result["provider"] = f"openai ({OPENAI_MODEL})"
+                result["verifier_online"] = True
+                result["provider"] = f"OpenAI ({OPENAI_MODEL})"
                 return result
             else:
                 logger.warning(f"OpenAI API returned status {resp.status_code}: {resp.text}")
+                return {
+                    "verifier_online": False,
+                    "provider": "OpenAI (Error)",
+                    "override_escalation": False,
+                    "final_escalation": proposed_escalation,
+                    "intent_accurate": True,
+                    "verified_intent": proposed_intent,
+                    "critique": f"AI Verifier agent is temporarily unreachable (HTTP {resp.status_code}). Result is determined solely on the basis of the Primary System.",
+                    "refined_reply": None
+                }
         except Exception as e:
-            logger.warning(f"OpenAI verification failed: {e}. Falling back to heuristic critic.")
-
-        return self._verify_via_heuristic_critic(
-            customer_text, proposed_intent, secondary_intent,
-            proposed_escalation, escalation_reason, drafted_reply
-        )
-
-    def _verify_via_heuristic_critic(
-        self,
-        customer_text: str,
-        proposed_intent: str,
-        secondary_intent: Optional[str],
-        proposed_escalation: str,
-        escalation_reason: str,
-        drafted_reply: str
-    ) -> Dict[str, Any]:
-        """Deterministic safety critic running locally with 0ms external latency."""
-        import re
-
-        override_escalation = False
-        final_escalation = proposed_escalation
-        critique = "Safety guardrail verified: actions compliant with Amazon Twitter support policies."
-        verified_intent = proposed_intent
-
-        # 1. Sarcasm detection (positive words paired with negative situations)
-        has_praise = bool(re.search(r'\b(?:thanks|thank you|brilliant|great job|awesome|love|top notch)\b', customer_text, re.I))
-        has_disaster = bool(re.search(r'\b(?:rain|dumped|trash|stolen|broken|empty box|nowhere|lost|late|worst|shitty)\b', customer_text, re.I))
-
-        if has_praise and has_disaster:
-            override_escalation = True
-            final_escalation = "ESCALATE"
-            critique = "Detected likely sarcastic praise masking a severe physical delivery/item complaint. Overriding to human escalation."
-            if proposed_intent == 'thankyou':
-                verified_intent = 'customer_service_complaint'
-
-        # 2. Financial or PII risk check in customer text
-        if re.search(r'\b(?:charged twice|double charge|unauthorized|stolen card|credit card|lawyer|sue)\b', customer_text, re.I):
-            if proposed_escalation != "ESCALATE":
-                override_escalation = True
-                final_escalation = "ESCALATE"
-                critique = "Financial dispute or legal risk detected in text. Overriding to human escalation."
-
-        return {
-            "verified": True,
-            "provider": "offline_heuristic_critic",
-            "override_escalation": override_escalation,
-            "final_escalation": final_escalation,
-            "intent_accurate": (verified_intent == proposed_intent),
-            "verified_intent": verified_intent,
-            "critique": critique,
-            "refined_reply": None
-        }
+            logger.warning(f"OpenAI verification call failed: {e}")
+            return {
+                "verifier_online": False,
+                "provider": "OpenAI (Unavailable)",
+                "override_escalation": False,
+                "final_escalation": proposed_escalation,
+                "intent_accurate": True,
+                "verified_intent": proposed_intent,
+                "critique": "AI Verifier agent is currently offline/timed out. Result is determined solely on the basis of the Primary System.",
+                "refined_reply": None
+            }

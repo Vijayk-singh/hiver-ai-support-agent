@@ -202,7 +202,26 @@ HTML_TEMPLATE = """
             </div>
           </div>
 
-          <!-- Card 2: Grounded Drafted Reply -->
+          <!-- Card 2: AI Verifier & Supervisor Guardrail -->
+          <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
+            <div class="flex items-center justify-between pb-4 border-b border-slate-800">
+              <div>
+                <span class="text-xs uppercase tracking-wider text-purple-400 font-bold">Independent AI Supervisor</span>
+                <h3 class="text-lg font-bold text-white mt-0.5">AI Verifier Agent Feedback</h3>
+              </div>
+              <div id="verifierBadge"></div>
+            </div>
+
+            <!-- Verifier Feedback Body -->
+            <div id="verifierFeedbackBox" class="mt-4 p-4 rounded-xl border"></div>
+
+            <div class="mt-3 p-3 bg-slate-950/80 rounded-xl border border-slate-800/80 text-xs text-slate-400 flex items-start gap-2.5">
+              <span class="text-amber-400 font-bold shrink-0">🛡️ Fail-Safe Protocol:</span>
+              <span class="leading-relaxed">If <strong>either</strong> the Primary Engine <strong>OR</strong> the AI Verifier flags the issue as critical, it is immediately escalated to a human specialist. If the Verifier is offline, the system safely relies solely on the Primary Engine.</span>
+            </div>
+          </div>
+
+          <!-- Card 3: Grounded Drafted Reply -->
           <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
             <div class="flex items-center justify-between mb-3">
               <div>
@@ -356,6 +375,45 @@ HTML_TEMPLATE = """
           <strong>Assigned Team:</strong> <span class="text-amber-400">${esc.suggested_team}</span>
         </div>
       `;
+
+      // 2.5 AI Verifier Feedback Rendering
+      const verifier = res.verifier_audit || {};
+      const verifierOnline = verifier.verifier_online === true;
+      const verifierBadge = document.getElementById('verifierBadge');
+      const verifierBox = document.getElementById('verifierFeedbackBox');
+
+      if (verifierOnline) {
+        verifierBadge.innerHTML = `<span class="px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>Online (${verifier.provider || 'Gemini'})</span>`;
+
+        const isVerifierEscalate = (verifier.final_escalation === 'ESCALATE' || verifier.override_escalation === true);
+        const vBoxBorder = isVerifierEscalate ? 'border-amber-500/30 bg-amber-500/5' : 'border-emerald-500/30 bg-emerald-500/5';
+        const vTextColor = isVerifierEscalate ? 'text-amber-400' : 'text-emerald-400';
+
+        verifierBox.className = `mt-4 p-4 rounded-xl border ${vBoxBorder}`;
+        verifierBox.innerHTML = `
+          <div class="flex items-center justify-between text-xs mb-2">
+            <span class="font-bold ${vTextColor}">
+              ${isVerifierEscalate ? '⚠️ Critical Escalation Recommended / Verified' : '✅ Verified Safe for Autonomous Self-Service'}
+            </span>
+            <span class="text-slate-400">Verified Intent: <strong class="text-purple-300">${verifier.verified_intent || res.intent}</strong></span>
+          </div>
+          <p class="text-xs text-slate-200 leading-relaxed">
+            <strong>Supervisor Assessment:</strong> ${verifier.critique || 'Actions verified against Amazon support policies.'}
+          </p>
+        `;
+      } else {
+        verifierBadge.innerHTML = `<span class="px-3 py-1 rounded-full text-xs font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/30 flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-rose-400"></span>Verifier Agent Offline</span>`;
+        verifierBox.className = 'mt-4 p-4 rounded-xl border border-rose-900/30 bg-slate-950/80';
+        verifierBox.innerHTML = `
+          <div class="flex items-center gap-2 text-xs font-semibold text-rose-400 mb-1.5">
+            <span class="w-2 h-2 rounded-full bg-rose-500"></span>
+            AI Verifier Agent Inactive / Unavailable
+          </div>
+          <p class="text-xs text-slate-400 leading-relaxed">
+            ${verifier.critique || 'The AI Verifier agent is currently offline or unconfigured. The system is operating in fail-safe standalone mode, and the resolution above is determined solely on the basis of the Primary Engine.'}
+          </p>
+        `;
+      }
 
       // 3. Drafted Reply
       document.getElementById('draftedReplyText').textContent = res.drafted_reply;

@@ -86,7 +86,7 @@ class AmazonSupportAgent:
             retrieved_cases=retrieved_cases
         )
 
-        # Step 5: Verification & Safety Guardrail (LLM Critic / Heuristic Guardrail)
+        # Step 5: Verification & Safety Guardrail (LLM Critic / Fail-Safe Union Policy)
         final_reply = agent_reply_info['reply']
         audit = self.verifier.verify_action(
             customer_text=customer_text,
@@ -97,12 +97,32 @@ class AmazonSupportAgent:
             drafted_reply=final_reply
         )
 
-        # Apply guardrail overrides if critic detected safety violation or sarcasm
-        if audit.get("override_escalation"):
-            escalation_decision.decision = audit.get("final_escalation", "ESCALATE")
-            escalation_decision.reason = f"[Critic Override]: {audit.get('critique', '')}"
+        verifier_online = audit.get("verifier_online", False)
+        verifier_escalate = (audit.get("final_escalation") == "ESCALATE" or audit.get("override_escalation") is True)
+        primary_escalate = (escalation_decision.decision == "ESCALATE")
+
+        # FAIL-SAFE UNION POLICY:
+        # If EITHER system (Primary Engine OR AI Verifier) flags the issue as critical/ESCALATE,
+        # the final decision MUST be ESCALATE to a human specialist.
+        # If the Verifier is offline or failed, the decision is based solely on the Primary Engine.
+        if primary_escalate or (verifier_online and verifier_escalate):
+            escalation_decision.decision = "ESCALATE"
             escalation_decision.priority = "HIGH"
             escalation_decision.risk_level = "HIGH"
+
+            if primary_escalate and (verifier_online and verifier_escalate):
+                escalation_decision.reason = f"[Dual Consensus Escalation]: Primary Engine ('{escalation_decision.reason}') & AI Verifier ('{audit.get('critique', '')}') both flagged critical risk."
+            elif verifier_online and verifier_escalate:
+                escalation_decision.reason = f"[AI Verifier Guardrail Override]: {audit.get('critique', '')}"
+            else:
+                if not verifier_online:
+                    escalation_decision.reason = f"[Primary Engine Escalation (Verifier Offline)]: {escalation_decision.reason}"
+                else:
+                    escalation_decision.reason = f"[Primary Engine Escalation]: {escalation_decision.reason}"
+        else:
+            escalation_decision.decision = "AUTO_HANDLE"
+            if not verifier_online:
+                escalation_decision.reason = f"[Primary Engine Safe Auto-Handle (Verifier Offline)]: {escalation_decision.reason}"
 
         if audit.get("refined_reply"):
             final_reply = audit["refined_reply"]

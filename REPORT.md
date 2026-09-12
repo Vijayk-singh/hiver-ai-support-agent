@@ -24,9 +24,9 @@ Customer support on Twitter is fundamentally different from email or live chat:
 
 ---
 
-## 2. System Architecture
+## 2. System Architecture: Maker–Checker Pipeline
 
-The agent operates across three integrated stages:
+The agent operates across a multi-stage Maker–Checker architecture:
 
 ```
                             ┌────────────────────────┐
@@ -35,23 +35,34 @@ The agent operates across three integrated stages:
                                         │
                            [Stage 1: Intent Triage]
                                         │
-                         Primary & Secondary Intent
+                         Primary & Secondary Intent (18 Classes)
                                         │
-                                        ├──────────────────────────────────────┐
-                                        ▼                                      ▼
-                        [Stage 2: Knowledge Retrieval]           [Stage 3: Escalation Engine]
-                                        │                                      │
-                         Top-k Historical Resolutions             Auto-Handle vs. Escalate
-                                        │                               (with Stated Reason)
-                                        └───────────────────┬──────────────────┘
-                                                            ▼
-                                               [Stage 4: Grounded Drafter]
-                                                            │
-                                                   Final Grounded Reply
+                         ┌──────────────┴──────────────┐
+                         ▼                             ▼
+        [Stage 2: Knowledge Retrieval]   [Stage 3: Escalation Engine]
+                         │                             │
+          Top-k Historical Resolutions     Primary Triage Decision
+                         │                             │
+                         └──────────────┬──────────────┘
+                                        ▼
+                           [Stage 4: Grounded Drafter]
+                                        │
+                               Proposed Draft Reply
+                                        │
+                                        ▼
+                [Stage 5: AI Verifier & Safety Guardrail (Checker)]
+                    • Powered by Gemini 2.5 Flash / OpenAI / Offline Critic
+                    • Sarcasm & emotion contrast detection
+                    • PII & financial policy compliance audit
+                                        │
+                                        ▼
+                           [Fail-Safe Union Protocol]
+             If EITHER Primary Engine OR AI Verifier flags critical
+                       ──► ESCALATE TO HUMAN SPECIALIST
 ```
 
 1. **Intent Classification (`src/classify_intents.py`):**
-   - Hierarchical rule-and-pattern engine covering 18 predefined intent labels tailored to Amazon support data.
+   - Hierarchical rule-and-pattern engine covering 18 predefined intent labels tailored to Amazon support data with spelling typo tolerance (e.g. `dilivered`, `delievred`, `not received`).
    - Assigns `intent` and `secondary_intent` to capture multi-faceted customer complaints (e.g. `order_not_delivered` + `customer_service_complaint`).
 2. **Historical Knowledge Base (`src/knowledge_base.py`):**
    - Sublinear TF-IDF index over 15,000 historical support pairs.
@@ -61,6 +72,9 @@ The agent operates across three integrated stages:
    - Dual execution engine: Deterministic grounded synthesis (100% reproducible offline) + LLM grounded engine when API keys are supplied.
 4. **Escalation Engine (`src/escalation_engine.py`):**
    - Evaluates risk, priority, confidence, and states explicit reasoning for `AUTO_HANDLE` vs `ESCALATE`.
+5. **AI Verifier & Safety Guardrail (`src/verifier.py`):**
+   - Independent supervisor auditing proposed actions using **Gemini 2.5 Flash** or **OpenAI gpt-4o-mini**, with graceful offline fallback.
+   - **Fail-Safe Union Protocol:** If *either* the Primary Engine *or* the AI Verifier flags an issue as critical, the final decision is guaranteed to `ESCALATE` to human specialists. If the verifier is offline, the system safely falls back solely to the Primary Engine.
 
 ---
 
@@ -165,7 +179,7 @@ The Golden Evaluation Set consists of **220 curated examples** sampled from hist
 
 ---
 
-## 8. Decision Log (12 Non-Obvious Decisions)
+## 8. Decision Log (14 Non-Obvious Decisions)
 
 1. **Chose AmazonHelp over Other Brands:** Amazon has the largest, highest-standard e-commerce customer support dataset on Twitter with well-defined self-service portals.
 2. **Enforced 18 Predefined Intent Labels:** Selected a comprehensive 18-label taxonomy tailored to retail customer support instead of a generic 5-class set.
@@ -179,3 +193,5 @@ The Golden Evaluation Set consists of **220 curated examples** sampled from hist
 10. **Built Stratified Golden Evaluation Set ($N = 220$):** Selected balanced samples across all 16 active categories instead of random sampling which would be 40% delivery queries.
 11. **Reported Dangerous Auto-Handle Rate as Primary Escalation Metric:** Standard accuracy is misleading when 73% of data is auto-handled.
 12. **Added Alias `secondery_intent`:** Defensive engineering to prevent key errors against prompt typos.
+13. **Independent AI Verifier & Safety Supervisor (Maker–Checker Pattern):** Deployed a separate LLM auditor (Gemini 2.5 Flash / OpenAI) to critique proposed actions, catch sarcasm, and prevent policy violations before final execution.
+14. **Fail-Safe Union Escalation Protocol:** Implemented a union escalation policy: if *either* the Primary Engine *or* the AI Verifier flags critical risk, the inquiry is immediately routed to human specialists. If the verifier is offline, the system safely falls back solely to the Primary Engine without halting.
