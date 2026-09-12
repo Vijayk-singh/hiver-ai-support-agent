@@ -85,11 +85,12 @@ class EscalationEngine:
         # 4. Physical Delivery Loss / Theft / False Delivered Status
         # -------------------------------------------------------------
         if (intent == 'order_not_delivered' or
-                re.search(r'(?:says?|shows?|marked)\s+(?:as\s+)?delivered.*(?:not|never|haven\'t|nowhere|stolen|missing|empty)', text, re.I)):
+                re.search(r'(?:says?|shows?|marked)\s+(?:as\s+)?(?:delivered|dilivered).*(?:not|never|haven\'t|nowhere|stolen|missing|empty)', text, re.I) or
+                re.search(r'\b(?:order|package|parcel|item)?\s*(?:not|never|haven\'t|didn\'t)\s*(?:been\s+|yet\s+)?(?:deliv|diliv|deliev|receiv)', text, re.I)):
             return EscalationDecision(
                 decision="ESCALATE",
                 confidence=0.89,
-                reason="Delivery dispute (tracking marked delivered but customer reports non-receipt); requires carrier geo-tracking trace or human refund/reshipment authorization.",
+                reason="Delivery dispute (tracking marked delivered or customer reports non-receipt/lost shipment); requires carrier geo-tracking trace or human refund/reshipment authorization.",
                 risk_level="HIGH",
                 priority="HIGH",
                 suggested_team="Shipping & Delivery Operations"

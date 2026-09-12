@@ -140,16 +140,18 @@ INTENT_RULES: Dict[str, List[Tuple[str, float]]] = {
         (r'\bhousehold\s+account\b', 10.0),
     ],
     'order_not_delivered': [
-        (r'\b(?:not\s+delivered|never\s+delivered|never\s+arrived|didn\'t\s+arrive|not\s+arrived|hasn\'t\s+arrived|did\s+not\s+arrive)\b', 16.0),
+        (r'\b(?:order|package|parcel|item|delivery|shipment|product)?\s*(?:is\s+|was\s+)?(?:not|never|still\s+not|yet\s+not|haven\'t|hasn\'t|didn\'t)\s*(?:been\s+|yet\s+)?(?:deliv(?:ered|erd|er|ering)?|diliv(?:ered|erd|er)?|deliev(?:ered|erd)?|receiv(?:ed|e)?|arriv(?:ed|e)?|reach(?:ed)?)\b', 18.0),
+        (r'\b(?:order|package|parcel|item|shipment)\s+(?:not\s+(?:delivered|dilivered|delievered|deliverd|deliver|received|arrived))\b', 18.0),
+        (r'\b(?:not\s+(?:delivered|dilivered|delievered|deliverd|deliver)|never\s+(?:delivered|dilivered)|never\s+arrived|didn\'t\s+arrive|not\s+arrived|hasn\'t\s+arrived|did\s+not\s+arrive)\b', 16.0),
         (r'\b(?:haven\'t|hasn\'t|didn\'t|never)\s+(?:received|gotten|got|receive)\s+(?:my\s+)?(?:order|package|parcel|item|delivery)\b', 16.0),
         (r'\b(?:missing|lost)\s+(?:package|parcel|order|item|shipment)\b', 14.0),
-        (r'\b(?:says|marked|shows|stated|claimed)\s+(?:as\s+)?(?:delivered|dlvd)\s+(?:but|and\s+not|yet|nowhere|haven\'t|nobody)\b', 16.0),
-        (r'\bdelivered\s+to\s+(?:wrong|someone\s+else|different\s+address|another\s+house|wrong\s+country|bushes)\b', 15.0),
-        (r'\bwhere\s+is\s+my\s+(?:order|package|parcel)\b.*(?:says?\s+delivered|marked|never\s+came|nowhere)', 16.0),
+        (r'\b(?:says|marked|shows|stated|claimed)\s+(?:as\s+)?(?:delivered|dlvd|dilivered)\s+(?:but|and\s+not|yet|nowhere|haven\'t|nobody|never)\b', 16.0),
+        (r'\b(?:delivered|dilivered)\s+to\s+(?:wrong|someone\s+else|different\s+address|another\s+house|wrong\s+country|bushes)\b', 15.0),
+        (r'\bwhere\s+is\s+my\s+(?:order|package|parcel)\b.*(?:says?\s+(?:delivered|dilivered)|marked|never\s+came|nowhere)', 16.0),
         (r'\bstill\s+(?:have\s+not|haven\'t|have\s+never)\s+received\b', 15.0),
-        (r'\b(?:couldn\'t|can\'t|didn\'t)\s+deliver\b', 12.0),
+        (r'\b(?:couldn\'t|can\'t|didn\'t)\s+(?:deliver|diliver)\b', 12.0),
         (r'\bno\s+show\b', 11.0),
-        (r'\bnon\s*delivery\b', 14.0),
+        (r'\bnon\s*(?:delivery|dilvery)\b', 14.0),
         (r'\bnot\s+received\s+anything\b', 15.0),
         (r'\bnot\s+at\s+my\s+house\b', 14.0),
         (r'\bnever\s+showed\s+up\b', 14.0),
@@ -267,9 +269,13 @@ def classify_single_pair(cust_text: str, brand_text: str) -> Tuple[str, str]:
             scores[intent] += weight
 
     # 3. Disambiguation heuristics
-    # Delivered vs not delivered conflict
-    if re.search(r'(?:says?|shows?|marked)\s+(?:as\s+)?delivered', cust_str, re.I) and re.search(r'\b(?:not|never|haven\'t|hasn\'t|didn\'t|nowhere|no\s+sign)\b', cust_str, re.I):
+    # Delivered vs not delivered conflict / non-receipt check
+    if re.search(r'(?:says?|shows?|marked)\s+(?:as\s+)?(?:delivered|dilivered)', cust_str, re.I) and re.search(r'\b(?:not|never|haven\'t|hasn\'t|didn\'t|nowhere|no\s+sign)\b', cust_str, re.I):
         scores['order_not_delivered'] += 15.0
+
+    # Direct order non-receipt with spelling variations (dilivered, not received, not deliver, etc.)
+    if re.search(r'\b(?:order|package|parcel|item|delivery)?\s*(?:is\s+|was\s+)?(?:not|never|haven\'t|didn\'t|hasn\'t)\s*(?:been\s+|yet\s+)?(?:deliv|diliv|deliev|receiv)', cust_str, re.I):
+        scores['order_not_delivered'] += 16.0
 
     # Damaged package/contents
     if re.search(r'\b(?:broken|damaged|smashed|opened|torn|ripped|cracked)\b', cust_str, re.I):
