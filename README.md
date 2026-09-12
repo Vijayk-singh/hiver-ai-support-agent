@@ -15,11 +15,12 @@ The entire pipeline is deterministic, self-contained, and runnable without paid 
 # 1. Activate virtual environment
 source venv/bin/activate
 
-# 2. Run full evaluation harness on the Golden Evaluation Set (N = 220)
-python3 src/evaluate.py
+# 2. Launch interactive Web Dashboard (UI)
+python3 src/app.py
+# Open http://localhost:5000 in your browser to interact with the live agent!
 
-# 3. Test interactive customer message processing
-python3 src/agent.py --text "My package says delivered but I never received it! Where is it?"
+# 3. Run full evaluation harness on the Golden Evaluation Set (N = 220)
+python3 src/evaluate.py
 ```
 
 ---
@@ -68,6 +69,7 @@ hiver-ai-support-agent/
 │   ├── golden_evaluation_set.csv           # 220 curated gold test cases
 │   └── evaluation_results.csv              # Full model inference predictions
 ├── src/
+│   ├── app.py                              # Live interactive web dashboard & API
 │   ├── extract_brand_pairs.py              # Raw dataset extractor & cleaner
 │   ├── classify_intents.py                 # Hierarchical intent classifier
 │   ├── knowledge_base.py                   # TF-IDF historical case retriever
@@ -85,10 +87,17 @@ hiver-ai-support-agent/
 
 ---
 
-## 💻 CLI Usage Guide
+## 💻 Usage Guide
 
-### 1. Unified Agent Triage & Reply
-Process any raw customer inquiry:
+### 1. Launch Interactive Web Dashboard
+Run the web application locally:
+```bash
+python3 src/app.py
+```
+Open **`http://localhost:5000`** in your browser to enter queries, test preset scenarios, view human vs. system escalation decisions, and read grounded replies.
+
+### 2. Unified Agent CLI Triage & Reply
+Process any raw customer inquiry via terminal:
 ```bash
 python3 src/agent.py --text "My order was supposed to arrive yesterday and your courier is refusing to deliver it!"
 ```

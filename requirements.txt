@@ -9,3 +9,4 @@ kagglehub>=0.2.0
 datasets>=2.18.0
 rich>=13.7.0
 langdetect>=1.0.9
+flask>=3.0.0
