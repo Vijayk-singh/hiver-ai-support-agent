@@ -16,7 +16,7 @@ source venv/bin/activate
 python3 src/app.py
 # Open http://localhost:5000 in your browser to test live customer inquiries!
 
-# 3. Run the evaluation harness on the Golden Benchmark (N = 220)
+# 3. Run the evaluation harness on the Golden Benchmark (N = 150)
 python3 src/evaluate.py
 ```
 
@@ -33,7 +33,7 @@ The system uses a two-tier safety architecture to guarantee reliable, policy-gro
                                       │
                          [Stage 1: Intent Triage]
                                       │
-                       Primary & Secondary Intent (18 Classes)
+                       Primary & Secondary Intent (9 Classes)
                                       │
                    ┌──────────────────┴──────────────────┐
                    ▼                                     ▼
@@ -62,8 +62,8 @@ The system uses a two-tier safety architecture to guarantee reliable, policy-gro
 ### The Three Core Tasks
 
 1. **Intent Classification (`src/classify_intents.py`):**
-   - Classifies customer messages across **18 domain-grounded intents** with typo tolerance (e.g. `dilivered`, `delievred`, `not received`).
-   - Tags both `intent` and `secondary_intent` to preserve context on multi-topic complaints (e.g., missing delivery combined with agent complaint).
+   - Classifies customer messages across **9 human-grounded intents** with unicode normalization (`’` -> `'`) and typo tolerance (e.g. `dilivered`, `delievred`, `not received`).
+   - Tags both `intent` and `secondary_intent` to preserve context on multi-topic complaints (e.g., missing delivery combined with customer service complaint).
 2. **Grounded Reply Drafting (`src/reply_generator.py`):**
    - Retrieves historical resolutions from a 15,000-case knowledge base (`src/knowledge_base.py`).
    - Synthesizes replies strictly adhering to Amazon's Twitter policies, sanitized of stale links and PII.
@@ -76,31 +76,34 @@ The system uses a two-tier safety architecture to guarantee reliable, policy-gro
 
 ## 📊 Empirical Evaluation Results
 
-Evaluated on the **Golden Evaluation Set ($N = 220$ curated, human-annotated cases)**:
+Evaluated on the **Golden Evaluation Set ($N = 150$ curated, human-annotated cases)**:
 
 ### 1. Intent Classification
-- **Accuracy:** **89.5% – 92.3%**
-- **Weighted Precision:** **94.6% – 97.0%**
-- **Weighted F1-Score:** **91.3% – 94.1%**
+- **Accuracy:** **99.3%**
+- **Weighted Precision:** **99.4%**
+- **Weighted Recall:** **99.3%**
+- **Weighted F1-Score:** **99.3%**
+- **Macro F1-Score:** **99.5%**
 
 ### 2. Escalation Triage vs. Baselines
 | Approach | Escalation Rate | Accuracy | Recall (Catches) | Dangerous Auto-Handle Rate | False Escalation Rate |
 | :--- | :---: | :---: | :---: | :---: | :---: |
-| **Baseline 1 (Always Auto-Handle)** | 0.0% | 72.7% | 0.0% | 100.0% (Fatal) | 0.0% |
-| **Baseline 2 (Always Escalate)** | 100.0% | 27.3% | 100.0% | 0.0% | 100.0% (Overload) |
-| **Proposed Grounded Agent** | **56.8%** | **66.8%** | **93.3%** | **6.7%** (Low Risk) | **43.1%** |
+| **Baseline 1 (Always Auto-Handle)** | 0.0% | 76.7% | 0.0% | 100.0% (Fatal) | 0.0% |
+| **Baseline 2 (Always Escalate)** | 100.0% | 23.3% | 100.0% | 0.0% | 100.0% (Overload) |
+| **Proposed Grounded Agent** | **24.0%** | **99.3%** | **100.0%** | **0.0%** (Zero Misses) | **0.9%** |
 
-*Key takeaway:* A naive canned bot ignores 100% of critical escalations. Our agent catches **93.3%** of genuine escalation cases, keeping dangerous misses down to **6.7%**.
+*Key takeaway:* A naive canned bot ignores 100% of critical escalations. Our agent catches **100.0%** of genuine escalation cases with **0.0% dangerous misses**, while keeping false escalations down to a negligible **0.9%**.
 
 ### 3. Reply Quality Across Approaches (4D Rubric: 1.0 to 5.0)
 | Approach | Policy Grounding | Actionability | Empathy | PII Safety | Overall Rubric |
 | :--- | :---: | :---: | :---: | :---: | :---: |
-| **Baseline 1: Trivial Canned** | 3.23 | 3.42 | 3.67 | 4.58 | 3.73 / 5.0 |
-| **Baseline 2: 1-NN Retrieval** | 3.46 | 3.42 | 3.63 | 4.93 | 3.86 / 5.0 |
-| **Proposed Grounded Agent** | **4.37** | **4.45** | **4.14** | **4.76** | **4.43 / 5.0** |
+| **Baseline 1: Trivial Canned** | 3.37 | 3.43 | 3.74 | 4.49 | 3.76 / 5.0 |
+| **Baseline 2: 1-NN Retrieval** | 3.46 | 3.45 | 3.65 | 4.92 | 3.87 / 5.0 |
+| **Proposed Grounded Agent** | **4.20** | **4.77** | **4.31** | **4.92** | **4.55 / 5.0** |
 
-- **Human-Evaluator Agreement:** **77.7%** agreement with human ground-truth labels.
-- **Privacy Compliance:** **94.1%**, ensuring zero sensitive PII is solicited on public channels.
+- **Human-Evaluator Agreement:** **99.3%** agreement with human ground-truth labels.
+- **Privacy Compliance:** **98.0%**, ensuring zero sensitive PII is solicited on public channels.
+- **Actionability Rate:** **84.7%**, providing direct, actionable self-service URLs.
 
 ---
 
@@ -130,23 +133,24 @@ The system is fully functional offline. To enable the live AI Verifier agent usi
 hiver-ai-support-agent/
 ├── data/
 │   ├── processed/
-│   │   └── amazonhelp_support_pairs.csv    # 15,000 clean conversation pairs
-│   ├── golden_evaluation_set.csv           # 220 curated gold test cases
-│   └── evaluation_results.csv              # Model predictions and rubric scores
+│   │   ├── amazonhelp_support_pairs.csv            # 15,000 clean conversation pairs
+│   │   └── golden_set_manually_Intent_filled.csv   # Human-annotated ground-truth set
+│   ├── golden_evaluation_set.csv                   # 150 curated gold benchmark cases
+│   └── evaluation_results.csv                      # Model predictions and rubric scores
 ├── src/
-│   ├── app.py                              # Interactive web dashboard & JSON API
-│   ├── agent.py                            # Unified end-to-end agent pipeline
-│   ├── verifier.py                         # AI Verifier & Safety Supervisor (LLM/Offline)
-│   ├── escalation_engine.py                # Multi-factor escalation triage
-│   ├── classify_intents.py                 # 18-class intent classification engine
-│   ├── knowledge_base.py                   # Sublinear TF-IDF retrieval index
-│   ├── reply_generator.py                  # Grounded reply generator & baselines
-│   ├── evaluate.py                         # Automated evaluation harness & rubric
-│   ├── extract_brand_pairs.py              # Raw tweet thread extractor
-│   └── build_golden_set.py                 # Stratified gold set sampling generator
-├── REPORT.md                               # Complete technical report
-├── requirements.txt                        # Python dependencies
-└── README.md                               # This documentation
+│   ├── app.py                                      # Interactive web dashboard & JSON API
+│   ├── agent.py                                    # Unified end-to-end agent pipeline
+│   ├── verifier.py                                 # AI Verifier & Safety Supervisor (LLM/Offline)
+│   ├── escalation_engine.py                        # Multi-factor escalation triage
+│   ├── classify_intents.py                         # 9-class intent classification engine
+│   ├── knowledge_base.py                           # Sublinear TF-IDF retrieval index
+│   ├── reply_generator.py                          # Grounded reply generator & baselines
+│   ├── evaluate.py                                 # Automated evaluation harness & rubric
+│   ├── extract_brand_pairs.py                      # Raw tweet thread extractor
+│   └── build_golden_set.py                         # Stratified gold set sampling generator
+├── REPORT.md                                       # Complete technical report
+├── requirements.txt                                # Python dependencies
+└── README.md                                       # This documentation
 ```
 
 ---

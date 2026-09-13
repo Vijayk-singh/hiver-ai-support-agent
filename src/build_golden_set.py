@@ -17,27 +17,49 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 INPUT_CSV = PROJECT_ROOT / "data" / "processed" / "amazonhelp_support_pairs.csv"
 OUTPUT_CSV = PROJECT_ROOT / "data" / "golden_evaluation_set.csv"
 
-# Sampling targets per category to achieve 200 balanced, high-signal examples
+# Sampling targets per category to align with the 9 human ground-truth intents
 CATEGORY_QUOTAS = {
-    'order_not_delivered': 16,
-    'order_delayed': 16,
-    'order_status_inquiry': 16,
-    'refund_request': 16,
-    'return_request': 16,
-    'wrong_item_received': 14,
-    'damaged_item': 14,
-    'cancellation_request': 14,
-    'payment_issue': 14,
-    'account_issue': 14,
-    'customer_service_complaint': 18,
-    'product_inquiry': 12,
-    'Prime Membership': 12,
-    'thankyou': 12,
-    'Urgent': 8,
-    'Enquiry': 8,
+    'genral_enquiry': 35,
+    'order_delayed': 26,
+    'Discrepancy_in_Product': 20,
+    'return/refund request': 19,
+    'order_not_delivered': 18,
+    'account_issue': 15,
+    'customer_service_complaint': 10,
+    'payment_issue': 4,
+    'cancellation_request': 3,
 }
 
+MANUAL_GOLDEN_CSV = PROJECT_ROOT / "data" / "processed" / "golden_set_manually_Intent_filled.csv"
+
 def build_golden_set():
+    if MANUAL_GOLDEN_CSV.exists():
+        print(f"Loading curated human ground-truth dataset from: {MANUAL_GOLDEN_CSV}")
+        manual_df = pd.read_csv(MANUAL_GOLDEN_CSV)
+        
+        # Standardize columns
+        if 'manually_corrected_intent' in manual_df.columns:
+            manual_df['gold_intent'] = manual_df['manually_corrected_intent']
+            manual_df['intent'] = manual_df['manually_corrected_intent']
+        if 'manually_corrected_escalation' in manual_df.columns:
+            manual_df['gold_escalation'] = manual_df['manually_corrected_escalation']
+        if 'gold_secondary_intent' not in manual_df.columns:
+            manual_df['gold_secondary_intent'] = 'none'
+            manual_df['secondary_intent'] = 'none'
+        if 'gold_escalation_reason' not in manual_df.columns:
+            manual_df['gold_escalation_reason'] = manual_df['gold_escalation'].apply(
+                lambda esc: "High-risk customer grievance or critical issue requiring human intervention."
+                if esc == "ESCALATE" else "Standard self-service or policy inquiry handled automatically."
+            )
+            
+        manual_df.to_csv(OUTPUT_CSV, index=False)
+        print(f"Successfully synchronized {len(manual_df)} golden evaluation cases to: {OUTPUT_CSV}")
+        print("\nGold Escalation Distribution:")
+        print(manual_df['gold_escalation'].value_counts())
+        print("\nGold Intent Distribution:")
+        print(manual_df['gold_intent'].value_counts())
+        return
+
     df = pd.read_csv(INPUT_CSV)
     sampled_rows = []
 

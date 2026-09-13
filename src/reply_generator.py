@@ -17,6 +17,10 @@ load_dotenv()
 CANNOT_SOLVE_TEMPLATE = "Thank you for reaching out to Amazon. Please visit our help page for assistance with your account. ^Amazon"
 
 TRIVIAL_BASELINE_RESPONSES: Dict[str, str] = {
+    'genral_enquiry': "Thank you for reaching out! You can track your orders, manage account settings, and find answers at amazon.com/help. ^Amazon",
+    'general_enquiry': "Thank you for reaching out! You can track your orders, manage account settings, and find answers at amazon.com/help. ^Amazon",
+    'Discrepancy_in_Product': "We apologize for the issue with your item. You can initiate a replacement or return via our Online Return Center at amazon.com/returns. ^Amazon",
+    'return/refund request': "To return an item or check refund status, please visit our Online Return Center. Refunds typically process in 3-5 business days. ^Amazon",
     'order_not_delivered': "We are sorry you haven't received your order. Please check your delivery tracking or contact our support team. ^Amazon",
     'order_delayed': "We apologize for the delay in your delivery. Please check your order status on Amazon. ^Amazon",
     'order_status_inquiry': "You can track the status of your order anytime in the 'Your Orders' section of your Amazon account. ^Amazon",
@@ -39,6 +43,26 @@ TRIVIAL_BASELINE_RESPONSES: Dict[str, str] = {
 
 # Standard Amazon resolution guidance grounded in historical data
 HISTORICAL_RESOLUTION_POLICIES: Dict[str, Dict[str, str]] = {
+    'genral_enquiry': {
+        'empathy': "I'd be glad to help check on your order and inquiry!",
+        'action': "What does the estimated delivery date or tracking status say in 'Your Orders'? You can track your shipment details and account settings here: https://amazon.com/your-orders.",
+        'channel': "Your Orders Tracking",
+    },
+    'general_enquiry': {
+        'empathy': "I'd be glad to help check on your order and inquiry!",
+        'action': "What does the estimated delivery date or tracking status say in 'Your Orders'? You can track your shipment details and account settings here: https://amazon.com/your-orders.",
+        'channel': "Your Orders Tracking",
+    },
+    'Discrepancy_in_Product': {
+        'empathy': "I'm so sorry your item arrived damaged, defective, or incorrect!",
+        'action': "This is certainly not the condition we expect. Please visit our Online Return Center here: https://amazon.com/returns to request an instant replacement or full refund.",
+        'channel': "Online Return Center Replacement",
+    },
+    'return/refund request': {
+        'empathy': "I'd be happy to help with your return or refund request!",
+        'action': "You can easily initiate a return or track your refund in our Online Return Center: https://amazon.com/returns. Once processed, refunds take 3-5 business days.",
+        'channel': "Online Return Center / Refunds",
+    },
     'order_not_delivered': {
         'empathy': "I'm sorry to hear your package hasn't arrived!",
         'action': "If tracking shows delivered, please check around your property or with neighbors. If it's still missing, reach us via phone or chat here: https://amazon.com/contact-us so we can investigate or arrange a replacement/refund.",
@@ -205,7 +229,7 @@ class GroundedReplyGenerator:
         retrieved_cases: List[Dict[str, Any]]
     ) -> str:
         """Synthesizes a tailored, policy-grounded reply using historical case actions."""
-        policy = HISTORICAL_RESOLUTION_POLICIES.get(intent, HISTORICAL_RESOLUTION_POLICIES['other'])
+        policy = HISTORICAL_RESOLUTION_POLICIES.get(intent, HISTORICAL_RESOLUTION_POLICIES.get('genral_enquiry', HISTORICAL_RESOLUTION_POLICIES['other']))
         empathy = policy['empathy']
         action = policy['action']
 

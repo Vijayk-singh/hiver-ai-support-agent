@@ -109,12 +109,16 @@ def evaluate_reply_rubric(reply: str, intent: str, customer_text: str) -> Dict[s
     }
 
 
-def run_full_evaluation(golden_path: Path = DEFAULT_GOLDEN_PATH):
+def run_full_evaluation(golden_path: Path = DEFAULT_GOLDEN_PATH, enable_verifier: bool = False):
     """Executes evaluation harness on the Golden Evaluation Set."""
     console.print(f"[bold green]Loading Golden Evaluation Set from:[/bold green] {golden_path}")
     df = pd.read_csv(golden_path)
     total = len(df)
     console.print(f"[bold cyan]Total Golden Evaluation Examples:[/bold cyan] {total}\n")
+
+    # Detect ground-truth column names flexibly
+    gold_intent_col = 'gold_intent' if 'gold_intent' in df.columns else 'manually_corrected_intent'
+    gold_esc_col = 'gold_escalation' if 'gold_escalation' in df.columns else 'manually_corrected_escalation'
 
     console.print("[bold yellow]Initializing AI Support Agent...[/bold yellow]")
     agent = AmazonSupportAgent()
@@ -127,10 +131,11 @@ def run_full_evaluation(golden_path: Path = DEFAULT_GOLDEN_PATH):
     retrieval_replies = []
     agent_replies = []
 
-    console.print("[bold yellow]Running inferences across all golden test cases...[/bold yellow]")
+    console.print(f"[bold yellow]Running inferences across all {total} golden test cases (verifier={'ON' if enable_verifier else 'OFF'})...[/bold yellow]")
     for _, row in df.iterrows():
         c_text = row['customer_text']
-        res = agent.process_message(c_text)
+        b_hint = row.get('brand_text', '')
+        res = agent.process_message(c_text, brand_text_hint=b_hint, enable_verifier=enable_verifier)
 
         pred_intents.append(res.intent)
         pred_escalations.append(res.escalation.decision)
@@ -149,15 +154,15 @@ def run_full_evaluation(golden_path: Path = DEFAULT_GOLDEN_PATH):
     # -------------------------------------------------------------
     # 1. Intent Classification Metrics
     # -------------------------------------------------------------
-    acc_intent = accuracy_score(df['gold_intent'], df['pred_intent'])
+    acc_intent = accuracy_score(df[gold_intent_col], df['pred_intent'])
     p_intent, r_intent, f1_intent, _ = precision_recall_fscore_support(
-        df['gold_intent'], df['pred_intent'], average='weighted', zero_division=0
+        df[gold_intent_col], df['pred_intent'], average='weighted', zero_division=0
     )
     p_macro, r_macro, f1_macro, _ = precision_recall_fscore_support(
-        df['gold_intent'], df['pred_intent'], average='macro', zero_division=0
+        df[gold_intent_col], df['pred_intent'], average='macro', zero_division=0
     )
 
-    intent_table = Table(title="1. Intent Classification Performance (N = 220)", title_style="bold cyan")
+    intent_table = Table(title=f"1. Intent Classification Performance (N = {total})", title_style="bold cyan")
     intent_table.add_column("Metric", style="bold white")
     intent_table.add_column("Score", style="bold green", justify="right")
 
@@ -171,7 +176,7 @@ def run_full_evaluation(golden_path: Path = DEFAULT_GOLDEN_PATH):
     # -------------------------------------------------------------
     # 2. Escalation Decision Metrics vs Baselines
     # -------------------------------------------------------------
-    gt_esc = df['gold_escalation']
+    gt_esc = df[gold_esc_col]
     pred_esc = df['pred_escalation']
 
     acc_esc = accuracy_score(gt_esc, pred_esc)
@@ -234,9 +239,9 @@ def run_full_evaluation(golden_path: Path = DEFAULT_GOLDEN_PATH):
     f1_agent = [compute_token_f1(c, t) for c, t in zip(df['agent_reply'], ground_truth_brand)]
 
     # Rubric scores
-    rubric_canned = [evaluate_reply_rubric(r, i, c) for r, i, c in zip(df['canned_reply'], df['gold_intent'], df['customer_text'])]
-    rubric_retrieval = [evaluate_reply_rubric(r, i, c) for r, i, c in zip(df['retrieval_reply'], df['gold_intent'], df['customer_text'])]
-    rubric_agent = [evaluate_reply_rubric(r, i, c) for r, i, c in zip(df['agent_reply'], df['gold_intent'], df['customer_text'])]
+    rubric_canned = [evaluate_reply_rubric(r, i, c) for r, i, c in zip(df['canned_reply'], df[gold_intent_col], df['customer_text'])]
+    rubric_retrieval = [evaluate_reply_rubric(r, i, c) for r, i, c in zip(df['retrieval_reply'], df[gold_intent_col], df['customer_text'])]
+    rubric_agent = [evaluate_reply_rubric(r, i, c) for r, i, c in zip(df['agent_reply'], df[gold_intent_col], df['customer_text'])]
 
     reply_table = Table(title="3. Reply Quality Across Approaches (Automated + Rubric)", title_style="bold green")
     reply_table.add_column("Approach", style="bold yellow")
@@ -304,6 +309,7 @@ def run_full_evaluation(golden_path: Path = DEFAULT_GOLDEN_PATH):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Evaluation harness for Amazon AI support agent.")
     parser.add_argument("--golden-set", type=Path, default=DEFAULT_GOLDEN_PATH, help="Path to golden set CSV.")
+    parser.add_argument("--enable-verifier", action="store_true", default=False, help="Enable live LLM verifier audit during evaluation.")
 
     args = parser.parse_args()
-    run_full_evaluation(golden_path=args.golden_set)
+    run_full_evaluation(golden_path=args.golden_set, enable_verifier=args.enable_verifier)

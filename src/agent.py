@@ -59,7 +59,8 @@ class AmazonSupportAgent:
     def process_message(
         self,
         customer_text: str,
-        brand_text_hint: str = ""
+        brand_text_hint: str = "",
+        enable_verifier: bool = True
     ) -> SupportAgentResult:
         """Process an incoming customer message through all stages."""
         # Step 1: Classify intent
@@ -83,19 +84,32 @@ class AmazonSupportAgent:
             customer_text=customer_text,
             intent=intent,
             secondary_intent=sec_intent,
-            retrieved_cases=retrieved_cases
+            retrieved_cases=retrieved_cases,
+            use_llm_if_available=enable_verifier
         )
 
         # Step 5: Verification & Safety Guardrail (LLM Critic / Fail-Safe Union Policy)
         final_reply = agent_reply_info['reply']
-        audit = self.verifier.verify_action(
-            customer_text=customer_text,
-            proposed_intent=intent,
-            secondary_intent=sec_intent,
-            proposed_escalation=escalation_decision.decision,
-            escalation_reason=escalation_decision.reason,
-            drafted_reply=final_reply
-        )
+        if enable_verifier:
+            audit = self.verifier.verify_action(
+                customer_text=customer_text,
+                proposed_intent=intent,
+                secondary_intent=sec_intent,
+                proposed_escalation=escalation_decision.decision,
+                escalation_reason=escalation_decision.reason,
+                drafted_reply=final_reply
+            )
+        else:
+            audit = {
+                "verifier_online": False,
+                "provider": "offline",
+                "override_escalation": False,
+                "final_escalation": escalation_decision.decision,
+                "intent_accurate": True,
+                "verified_intent": intent,
+                "critique": "AI Verifier bypassed (fast evaluation mode). Decision determined by Primary Engine.",
+                "refined_reply": None
+            }
 
         verifier_online = audit.get("verifier_online", False)
         verifier_escalate = (audit.get("final_escalation") == "ESCALATE" or audit.get("override_escalation") is True)
@@ -214,11 +228,15 @@ if __name__ == '__main__':
     else:
         # Run demo cases
         demo_queries = [
-            "Where is my package? The tracking says out for delivery today.",
-            "I bought shoes and received an empty box! The seal was completely torn open!",
-            "Your representative was super rude and hung up on me when I asked why my refund was delayed!",
-            "Thank you so much Amazon, you guys resolved my issue in 5 minutes!",
-            "URGENT: I need my medicine order before 4pm because I am traveling tonight!"
+            "Can you check when my order will be delivered? Tracking ID Q3600231.",
+            "My package was guaranteed for yesterday by 8pm and is delayed 3 days now!",
+            "I ordered shoes and received an empty box! The package was damaged and torn open.",
+            "When will I receive my refund? The return was picked up 5 days ago.",
+            "My order shows delivered but nobody came! It never arrived at my door.",
+            "Someone hacked my account and changed my password, I cannot log in!",
+            "Your representative was super rude and hung up on me when I asked for help!",
+            "Tried loading money in Amazon Pay twice, money deducted but balance not updated #AmazonPay",
+            "Help I wish to cancel order #D01-3970700-6742663 inadvertently ordered."
         ]
         for q in demo_queries:
             console.print("\n" + "=" * 80)

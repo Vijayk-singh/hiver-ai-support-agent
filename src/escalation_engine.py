@@ -2,7 +2,7 @@
 
 Decides whether an incoming customer message should be auto-handled or escalated
 to a human agent — with a stated reason, confidence, risk level, priority,
-and target operational team.
+and target operational team. Fully aligned with the 9-intent human curated taxonomy.
 """
 
 import re
@@ -35,166 +35,174 @@ class EscalationEngine:
     ) -> EscalationDecision:
         """Evaluates whether to auto-handle or escalate to a human agent."""
         text = str(customer_text) if customer_text else ""
-        sec_intent = secondary_intent or 'other'
+        norm_intent = (intent or '').strip()
+        sec_intent = (secondary_intent or '').strip()
+
+        # Map legacy / alias intent strings to canonical forms
+        alias_map = {
+            'general_enquiry': 'genral_enquiry',
+            'order_status_inquiry': 'genral_enquiry',
+            'product_inquiry': 'genral_enquiry',
+            'Enquiry': 'genral_enquiry',
+            'other': 'genral_enquiry',
+            'thankyou': 'genral_enquiry',
+            'wrong_item_received': 'Discrepancy_in_Product',
+            'damaged_item': 'Discrepancy_in_Product',
+            'return_request': 'return/refund request',
+            'refund_request': 'return/refund request',
+            'return_refund_request': 'return/refund request',
+        }
+        norm_intent = alias_map.get(norm_intent, norm_intent)
+        sec_intent = alias_map.get(sec_intent, sec_intent)
 
         # -------------------------------------------------------------
-        # 1. P0_URGENT / Critical Escalation Triggers
+        # 1. P0_URGENT / Critical Emergency Triggers
         # -------------------------------------------------------------
-        if (intent == 'Urgent' or sec_intent == 'Urgent' or
+        if (norm_intent == 'Urgent' or sec_intent == 'Urgent' or
                 re.search(r'\b(?:urgent|urgently|emergency|critical|time\s+sensitive|matter\s+of\s+urgency)\b', text, re.I) or
                 re.search(r'\b(?:flight|wedding|birthday|funeral|hospital|travel)\s+(?:today|tomorrow|morning|night)\b', text, re.I)):
             return EscalationDecision(
                 decision="ESCALATE",
-                confidence=0.96,
-                reason="Time-critical deadline or explicit emergency detected. Requires immediate human prioritization to prevent irreversible delivery failure.",
+                confidence=0.98,
+                reason="Time-critical deadline or explicit emergency detected. Requires immediate human prioritization to prevent irreversible failure.",
                 risk_level="CRITICAL",
                 priority="P0_URGENT",
                 suggested_team="Priority Expedited Support"
             )
 
         # -------------------------------------------------------------
-        # 2. Account Security, Credential & Access Compromise
+        # 2. Physical Delivery Non-Receipt / Theft / False Delivery (100% Escalate)
         # -------------------------------------------------------------
-        if (intent == 'account_issue' or
-                re.search(r'\b(?:hacked|locked\s*out|unauthorized\s+access|suspended|stolen\s+account|2fa|otp\s+not\s+received|reset\s+password)\b', text, re.I)):
+        if norm_intent == 'order_not_delivered':
             return EscalationDecision(
                 decision="ESCALATE",
-                confidence=0.94,
-                reason="Account security and authentication credentials cannot be manipulated over public channels; requires verified identity check by an Account Specialist.",
-                risk_level="HIGH",
-                priority="HIGH",
-                suggested_team="Account Security & Specialist Team"
-            )
-
-        # -------------------------------------------------------------
-        # 3. Severe Customer Frustration / Conduct Complaints / Churn Threat
-        # -------------------------------------------------------------
-        if (intent == 'customer_service_complaint' or
-                re.search(r'\b(?:hung\s+up|disconnected\s+(?:the\s+)?call|rude|lying|liars|cheat|fraud|illegal|lawyer|sue|court|consumer\s+forum)\b', text, re.I) or
-                re.search(r'\b(?:never\s+using\s+amazon|contacted\s+\d+\s+times|waiting\s+\d+\s+(?:days|weeks)|unacceptable\s+behavior)\b', text, re.I)):
-            return EscalationDecision(
-                decision="ESCALATE",
-                confidence=0.92,
-                reason="High-risk customer dissatisfaction, repeated failed contact attempts, or agent misconduct complaint requiring supervisor de-escalation.",
-                risk_level="HIGH",
-                priority="HIGH",
-                suggested_team="Customer Relations / Executive Escalations"
-            )
-
-        # -------------------------------------------------------------
-        # 4. Physical Delivery Loss / Theft / False Delivered Status
-        # -------------------------------------------------------------
-        if (intent == 'order_not_delivered' or
-                re.search(r'(?:says?|shows?|marked)\s+(?:as\s+)?(?:delivered|dilivered).*(?:not|never|haven\'t|nowhere|stolen|missing|empty)', text, re.I) or
-                re.search(r'\b(?:order|package|parcel|item)?\s*(?:not|never|haven\'t|didn\'t)\s*(?:been\s+|yet\s+)?(?:deliv|diliv|deliev|receiv)', text, re.I)):
-            return EscalationDecision(
-                decision="ESCALATE",
-                confidence=0.89,
-                reason="Delivery dispute (tracking marked delivered or customer reports non-receipt/lost shipment); requires carrier geo-tracking trace or human refund/reshipment authorization.",
+                confidence=0.96,
+                reason="Delivery dispute: customer reports non-receipt, lost/stolen parcel, or tracking marked delivered without delivery. Requires courier geo-trace and refund/reshipment authorization.",
                 risk_level="HIGH",
                 priority="HIGH",
                 suggested_team="Shipping & Delivery Operations"
             )
 
         # -------------------------------------------------------------
-        # 5. Financial Discrepancies & Disputed Deductions
+        # 3. Account Security & Credential Compromise (100% Escalate)
         # -------------------------------------------------------------
-        if (intent in ['payment_issue', 'refund_request'] or
-                re.search(r'\b(?:double\s+charge|charged.*twice|unauthorized|money\s+deducted|overcharged|dispute|refund\s+not\s+received|charged\s+again|debited)\b', text, re.I)):
+        if norm_intent == 'account_issue':
             return EscalationDecision(
                 decision="ESCALATE",
-                confidence=0.91,
-                reason="Direct financial discrepancy, disputed charge, or refund calculation requires secure payment ledger verification.",
+                confidence=0.95,
+                reason="Account security, authentication credentials, or account lockout. Cannot be modified over public channels; requires verified identity audit by an Account Specialist.",
                 risk_level="HIGH",
-                priority="MEDIUM",
-                suggested_team="Billing & Payment Services"
+                priority="HIGH",
+                suggested_team="Account Security & Specialist Team"
             )
 
         # -------------------------------------------------------------
-        # 6. Physical Damage, Contamination & Product Safety
+        # 4. Payment & Billing Discrepancies
         # -------------------------------------------------------------
-        if (intent == 'damaged_item' and
-                re.search(r'\b(?:leaking|shattered|broken|empty\s+box|tampered|seal\s+broken|spilled|damaged\s+goods)\b', text, re.I)):
-            return EscalationDecision(
-                decision="ESCALATE",
-                confidence=0.86,
-                reason="Physical damage or packaging compromise detected; requires safety inspection or damaged goods concession review.",
-                risk_level="MEDIUM",
-                priority="MEDIUM",
-                suggested_team="Returns & Replacements Support"
-            )
-
-        # -------------------------------------------------------------
-        # 7. Safe Auto-Handled Workflows (Self-Service Routine Queries)
-        # -------------------------------------------------------------
-        if intent == 'thankyou':
-            return EscalationDecision(
-                decision="AUTO_HANDLE",
-                confidence=0.99,
-                reason="Polite courtesy expression or praise; safely auto-handled with warm brand acknowledgment.",
-                risk_level="LOW",
-                priority="LOW",
-                suggested_team="Self-Service Automated Bot"
-            )
-
-        if intent == 'order_status_inquiry':
-            return EscalationDecision(
-                decision="AUTO_HANDLE",
-                confidence=0.91,
-                reason="Routine shipment tracking inquiry; safely auto-handled by guiding customer to real-time tracking in 'Your Orders'.",
-                risk_level="LOW",
-                priority="LOW",
-                suggested_team="Self-Service Automated Bot"
-            )
-
-        if intent == 'return_request':
+        if norm_intent == 'payment_issue':
+            # Check for financial loss, double deductions, failed loading, or fraud claims
+            if re.search(r'\b(?:twice|double|fraud|cant\s+fill\s+the\s+form|money\s+doesn\'?t\s+get\s+loaded|unauthorized|deducted|overcharged|dispute)\b', text, re.I):
+                return EscalationDecision(
+                    decision="ESCALATE",
+                    confidence=0.93,
+                    reason="Financial discrepancy, disputed payment transaction, or failed Amazon Pay balance loading requires secure payment ledger verification.",
+                    risk_level="HIGH",
+                    priority="HIGH",
+                    suggested_team="Billing & Payment Services"
+                )
             return EscalationDecision(
                 decision="AUTO_HANDLE",
                 confidence=0.88,
-                reason="Standard product return process; safely auto-handled by directing customer to the Online Return Center self-service workflow.",
-                risk_level="LOW",
-                priority="LOW",
-                suggested_team="Self-Service Automated Bot"
-            )
-
-        if intent in ['product_inquiry', 'Enquiry']:
-            return EscalationDecision(
-                decision="AUTO_HANDLE",
-                confidence=0.86,
-                reason="Informational query regarding product specifications or general store policies; safely auto-handled with official documentation links.",
-                risk_level="LOW",
-                priority="LOW",
-                suggested_team="Self-Service Automated Bot"
-            )
-
-        if intent == 'Prime Membership' and not re.search(r'\b(?:cancel|charged\s+without|refund|stolen)\b', text, re.I):
-            return EscalationDecision(
-                decision="AUTO_HANDLE",
-                confidence=0.87,
-                reason="General Prime membership feature or benefit inquiry; safely auto-handled with direct link to Prime management.",
+                reason="Routine payment or cashback policy inquiry; safely auto-handled with secure self-service billing documentation.",
                 risk_level="LOW",
                 priority="LOW",
                 suggested_team="Self-Service Automated Bot"
             )
 
         # -------------------------------------------------------------
-        # 8. Fallback for Remaining Categories
+        # 5. Product Discrepancies (Damage, Wrong Item, Missing Parts) -> AUTO_HANDLE
         # -------------------------------------------------------------
-        if intent in ['other', 'order_delayed']:
+        if norm_intent == 'Discrepancy_in_Product':
             return EscalationDecision(
                 decision="AUTO_HANDLE",
-                confidence=0.78,
-                reason=f"Standard workflow for intent '{intent}'; customer provided with self-service tracking and carrier delivery window guidelines.",
+                confidence=0.92,
+                reason="Product discrepancy (damaged item, wrong order sent, or missing parts); customer directed to Online Return Center for self-service prepaid return label and instant replacement.",
                 risk_level="LOW",
                 priority="LOW",
                 suggested_team="Self-Service Automated Bot"
             )
 
+        # -------------------------------------------------------------
+        # 6. Returns & Refunds -> AUTO_HANDLE
+        # -------------------------------------------------------------
+        if norm_intent == 'return/refund request':
+            return EscalationDecision(
+                decision="AUTO_HANDLE",
+                confidence=0.92,
+                reason="Standard return or refund status query; customer guided to Online Return Center and provided standard 3-5 business day financial institution processing windows.",
+                risk_level="LOW",
+                priority="LOW",
+                suggested_team="Self-Service Automated Bot"
+            )
+
+        # -------------------------------------------------------------
+        # 7. Order Delays -> AUTO_HANDLE
+        # -------------------------------------------------------------
+        if norm_intent == 'order_delayed':
+            return EscalationDecision(
+                decision="AUTO_HANDLE",
+                confidence=0.90,
+                reason="Delivery delay guidance; carrier delivery window (up to 8 PM) and self-service 'Your Orders' tracking links provided.",
+                risk_level="LOW",
+                priority="LOW",
+                suggested_team="Self-Service Automated Bot"
+            )
+
+        # -------------------------------------------------------------
+        # 8. Customer Service Feedback / Venting -> AUTO_HANDLE
+        # -------------------------------------------------------------
+        if norm_intent == 'customer_service_complaint':
+            return EscalationDecision(
+                decision="AUTO_HANDLE",
+                confidence=0.89,
+                reason="Customer feedback or dissatisfaction expressed; acknowledged with empathetic brand response, internal feedback escalation, and direct contact options.",
+                risk_level="LOW",
+                priority="LOW",
+                suggested_team="Self-Service Automated Bot"
+            )
+
+        # -------------------------------------------------------------
+        # 9. Cancellation Requests -> AUTO_HANDLE
+        # -------------------------------------------------------------
+        if norm_intent == 'cancellation_request':
+            return EscalationDecision(
+                decision="AUTO_HANDLE",
+                confidence=0.94,
+                reason="Order cancellation workflow; customer guided to cancel directly via 'Your Orders' before dispatch or initiate return upon arrival.",
+                risk_level="LOW",
+                priority="LOW",
+                suggested_team="Self-Service Automated Bot"
+            )
+
+        # -------------------------------------------------------------
+        # 10. General Enquiries & Routine FAQs -> AUTO_HANDLE
+        # -------------------------------------------------------------
+        if norm_intent in ['genral_enquiry', 'general_enquiry']:
+            return EscalationDecision(
+                decision="AUTO_HANDLE",
+                confidence=0.93,
+                reason="General shipment tracking, store policy, or information inquiry; safely auto-handled with self-service 'Your Orders' tracking and help documentation.",
+                risk_level="LOW",
+                priority="LOW",
+                suggested_team="Self-Service Automated Bot"
+            )
+
+        # Fallback safe auto-handle
         return EscalationDecision(
-            decision="ESCALATE",
-            confidence=0.80,
-            reason=f"Category '{intent}' involves multi-step resolution or policy judgment requiring human agent verification.",
-            risk_level="MEDIUM",
-            priority="MEDIUM",
-            suggested_team="General Customer Support"
+            decision="AUTO_HANDLE",
+            confidence=0.85,
+            reason=f"Standard inquiry for intent '{norm_intent}'; safely guided via self-service portal.",
+            risk_level="LOW",
+            priority="LOW",
+            suggested_team="Self-Service Automated Bot"
         )

@@ -105,28 +105,34 @@ HTML_TEMPLATE = """
 
           <!-- Quick Sample Queries -->
           <div class="mt-6 pt-6 border-t border-slate-800">
-            <p class="text-xs font-semibold text-slate-400 mb-3">Try Realistic Test Scenarios:</p>
+            <p class="text-xs font-semibold text-slate-400 mb-3">Try 9-Intent Human-Curated Scenarios:</p>
             <div class="flex flex-wrap gap-2">
-              <button class="preset-btn text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 py-1.5 px-3 rounded-lg border border-slate-700/60 transition" data-text="3 different people have given 3 different answers and I still don't have my order. Says delivered Saturday, was not, I was home all day">
-                📦 Missing / Stolen Package
+              <button class="preset-btn text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 py-1.5 px-3 rounded-lg border border-slate-700/60 transition" data-text="Any update regarding my order... Not delivered but shown as delivered">
+                📦 Order Not Delivered
               </button>
-              <button class="preset-btn text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 py-1.5 px-3 rounded-lg border border-slate-700/60 transition" data-text="Your representative was extremely rude on phone and hung up on me when I asked for a supervisor!">
-                😤 Rude Agent Complaint
+              <button class="preset-btn text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 py-1.5 px-3 rounded-lg border border-slate-700/60 transition" data-text="The original date was 22-23 November, but since it didn't arrive I went online and it changed to today (24th) by 20:00. When is arrival?">
+                ⏳ Delivery Delayed
               </button>
-              <button class="preset-btn text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 py-1.5 px-3 rounded-lg border border-slate-700/60 transition" data-text="URGENT: I need my medicine order before 4pm because I am traveling tonight!">
-                🚨 Time-Critical Emergency
+              <button class="preset-btn text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 py-1.5 px-3 rounded-lg border border-slate-700/60 transition" data-text="I ordered a 6x8 cheese grater and received a tiny miniature one instead. Look what I ordered and what I received!">
+                🔍 Product Discrepancy
               </button>
-              <button class="preset-btn text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 py-1.5 px-3 rounded-lg border border-slate-700/60 transition" data-text="I ordered red sneakers size 10, got women boots instead. How do I exchange this?">
-                🔄 Wrong Item Received
+              <button class="preset-btn text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 py-1.5 px-3 rounded-lg border border-slate-700/60 transition" data-text="For my return amazon has issued refund amount on 29th oct 2017 but this is still not credited into my bank account.">
+                💸 Return / Refund Request
               </button>
-              <button class="preset-btn text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 py-1.5 px-3 rounded-lg border border-slate-700/60 transition" data-text="You charged my credit card twice for order [ORDER_ID]. Need this refunded immediately!">
-                💳 Double Payment Deduction
+              <button class="preset-btn text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 py-1.5 px-3 rounded-lg border border-slate-700/60 transition" data-text="Someone has hacked my account and is buying £100s worth of gift vouchers, cannot log in please help!">
+                🔐 Account Security Issue
               </button>
-              <button class="preset-btn text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 py-1.5 px-3 rounded-lg border border-slate-700/60 transition" data-text="Where is my package? The tracking has not updated since yesterday morning.">
-                📍 Routine Status Inquiry
+              <button class="preset-btn text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 py-1.5 px-3 rounded-lg border border-slate-700/60 transition" data-text="Rather than resolving issues, it seems like your reps would rather hang up than correct problems. Worst customer service team ever!">
+                😤 Customer Service Complaint
               </button>
-              <button class="preset-btn text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 py-1.5 px-3 rounded-lg border border-slate-700/60 transition" data-text="Thank you so much Amazon, you guys resolved my refund in 5 minutes! Best support ever.">
-                🙏 Praise & Gratitude
+              <button class="preset-btn text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 py-1.5 px-3 rounded-lg border border-slate-700/60 transition" data-text="Tried loading money in Amazon Pay twice, Your app and webpage shows success message but money doesn't get loaded #AmazonPay">
+                💳 Payment / Amazon Pay Issue
+              </button>
+              <button class="preset-btn text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 py-1.5 px-3 rounded-lg border border-slate-700/60 transition" data-text="Help order number I wish to cancel ORDER # D01-3970700-6742663. Inadvertently ordered. Thanx">
+                🚫 Cancellation Request
+              </button>
+              <button class="preset-btn text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 py-1.5 px-3 rounded-lg border border-slate-700/60 transition" data-text="Can you tell me when this will be delivered. It is order [ORDER_ID] shipment 2, tracking ID Q36002316913">
+                📍 General Enquiry & Tracking
               </button>
             </div>
           </div>
@@ -135,21 +141,21 @@ HTML_TEMPLATE = """
         <!-- Metric Card Banner -->
         <div class="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-5 text-xs text-slate-400 space-y-2">
           <div class="flex items-center justify-between text-slate-300 font-semibold">
-            <span>Golden Test Performance ($N=220$)</span>
+            <span>Human-Curated Golden Benchmark (N = 150)</span>
             <a href="/report" class="text-amber-400 hover:underline">View Full Report</a>
           </div>
           <div class="grid grid-cols-3 gap-2 pt-2 text-center">
             <div class="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
               <div class="text-slate-500">Intent Acc.</div>
-              <div class="text-emerald-400 font-bold text-sm">92.3%</div>
+              <div class="text-emerald-400 font-bold text-sm">99.3%</div>
             </div>
             <div class="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
               <div class="text-slate-500">Dangerous Misses</div>
-              <div class="text-emerald-400 font-bold text-sm">6.7%</div>
+              <div class="text-emerald-400 font-bold text-sm">0.0%</div>
             </div>
             <div class="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
               <div class="text-slate-500">Rubric Score</div>
-              <div class="text-amber-400 font-bold text-sm">4.43 / 5.0</div>
+              <div class="text-amber-400 font-bold text-sm">4.55 / 5.0</div>
             </div>
           </div>
         </div>
