@@ -79,6 +79,7 @@ The system uses a two-tier safety architecture to guarantee reliable, policy-gro
 Evaluated on the **Golden Evaluation Set ($N = 150$ curated, human-annotated cases)**:
 
 ### 1. Intent Classification
+- Note: these figures are maximum i found it can go down in some cases to 5-6%
 - **Accuracy:** **99.3%**
 - **Weighted Precision:** **99.4%**
 - **Weighted Recall:** **99.3%**
